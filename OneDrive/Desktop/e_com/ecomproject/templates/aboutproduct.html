@@ -1,0 +1,30 @@
+{% extends  "homepage.html" %}
+
+{% block content%}
+<div class="row mt-5">  
+    <div class="col mx-3">
+        <img src = {{product.image.url}} height=500 >
+   </div>
+
+    <div class="col">
+        <h2 >{{product.title}}</h2>
+        <h6 class="mt-4">Warrenty Period :{{product.warrenty}}</h3>
+        <br>
+        <h6>Return Policy :{{product.return_policy}} </h3>
+        <br>
+        <h6>Price : Rs<strike>{{product.marked_price}}</strike> Rs{{product.selling_price}}</h3>
+        <br>
+        {{product.description}}
+        <br>
+        <p class = "mt-5">{{product.view_count}} items available. Hurry up </p>
+        <br>
+       
+
+
+        
+    </div>
+
+
+</div>
+    
+{%endblock%}

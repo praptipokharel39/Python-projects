@@ -1,0 +1,220 @@
+from django.shortcuts import render , redirect , get_object_or_404
+from django.views.generic import View,TemplateView, CreateView
+from .models import *
+from .forms import *
+from django.urls import reverse_lazy
+
+
+# class based view
+
+class AllProducts(TemplateView):
+    template_name = "allproducts.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["allcategories"] = Category.objects.all()
+
+        return context
+
+
+class HomeView(TemplateView):
+    template_name = "homepage.html"
+
+    def get_context_data(self , **kwargs):
+
+        context = super().get_context_data(**kwargs)
+        context["product_list"] = Product.objects.all().order_by("id")
+
+        return context
+
+    
+
+
+class AddtoCart(TemplateView):
+    template_name = "addtocart.html"
+
+    def get_context_data(self, **kwargs):
+
+        context = super().get_context_data(**kwargs)
+
+        #get product id from requested url
+        product_id = self.kwargs['pro_id']
+
+        #get product
+        product = Product.objects.get(id=product_id)
+        
+        #check if cart exists
+
+        cart_id = self.request.session.get('cart_id' , None)
+
+        if cart_id:
+            cart_obj , created  =  Cart.objects.get_or_create(id=cart_id)
+            this_product_in_cart = cart_obj.cartproducts_set.filter(product = product)
+
+            #item already exist in cart
+            if this_product_in_cart.exists():
+                cartproduct  = this_product_in_cart.last()
+                cartproduct.quantity += 1
+                cartproduct.subtotal += product.selling_price
+                cartproduct.save()
+                cart_obj.total += product.selling_price
+                cart_obj.save()
+
+            #new item is added in cart  
+            else:
+                cartproduct = CartProducts.objects.create(
+                    cart = cart_obj , product=product , rate = product.selling_price , quantity = 1 , subtotal=product.selling_price)
+                cart_obj.total += product.selling_price
+                cart_obj.save()
+                
+
+        else:
+            cart_obj = Cart.objects.create(total=0)
+            self.request.session["cart_id"] = cart_obj.id
+            cartproduct = CartProducts.objects.create(
+                cart = cart_obj , product=product , rate = product.selling_price , quantity = 1 , subtotal=product.selling_price
+            )
+            cart_obj.total += product.selling_price
+            cart_obj.save()
+            
+
+        return context
+
+
+class AboutProducts(TemplateView):
+    template_name = "aboutproduct.html"
+
+    def get_context_data(self , **kwargs):
+
+        context = super().get_context_data(**kwargs)
+        slug = self.kwargs['slug']
+        product = Product.objects.get(slug=slug)
+        context['product'] = product
+        
+        return context
+
+
+class MyCartView(TemplateView):
+    template_name = "mycart.html"
+
+    def get_context_data(self, **kwargs):
+        
+        context = super().get_context_data(**kwargs)
+        cart_id = self.request.session.get("cart_id" , None)
+
+        if cart_id:
+            cart,created = Cart.objects.get_or_create(id=cart_id)
+
+        else:
+            cart = None
+
+        
+        
+        context["cart"] = cart
+
+        return context
+
+class ManageCart(View):
+    
+    def get(self, request, *args, **kwargs):
+        
+        cp_id = self.kwargs["cp_id"]
+        action = request.GET.get("action")
+        
+        cp_obj = CartProducts.objects.get(id = cp_id)
+        cart_obj = cp_obj.cart
+
+        if action == "dcr":
+            cp_obj.quantity  -= 1
+            cp_obj.subtotal -= cp_obj.rate
+            cp_obj.save()
+
+            cart_obj.total -= cp_obj.rate
+            cart_obj.save()
+
+            if cp_obj.quantity <= 0:
+                cp_obj.delete()
+
+
+        elif action =="inc":
+            cp_obj.quantity  += 1
+            cp_obj.subtotal += cp_obj.rate
+            cp_obj.save()
+            cart_obj.total += cp_obj.rate
+            cart_obj.save()
+
+
+        elif action == "rmv":
+            cart_obj.total -= cp_obj.subtotal
+            cart_obj.save()
+            cp_obj.delete()
+            pass
+
+        else:
+            pass
+        return redirect("ecomapp:mycart")
+
+
+
+class Checkout(CreateView):
+    template_name = "checkout.html"
+    form_class = CheckoutForm
+    success_url = reverse_lazy("ecomapp:home")
+
+
+    def get_context_data(self, **kwargs):
+        context =  super().get_context_data(**kwargs)
+
+        cart_id = self.request.session.get("cart_id" ,None)
+
+        if cart_id :
+            cart_obj = Cart.objects.get(id=cart_id)
+        
+        else:
+            cart_obj = None
+        context["cart"] = cart_obj 
+
+
+
+        return context
+    
+
+    def form_valid(self , form):
+
+        cart_id = self.request.session.get("cart_id")
+
+        if cart_id:
+            cart_obj = Cart.objects.get(id = cart_id)
+            form.instance.cart = cart_obj
+            form.instance.subtotal = cart_obj.total
+            form.instance.discount = 0
+            form.instance.total = cart_obj.total
+            form.instance.order_status = "Order Received"
+            
+        else:
+            return redirect("ecomapp:home")
+        
+
+        return super().form_valid(form)
+
+
+
+class Customer(CreateView):
+    template_name = "customer.html"
+    form_class = CustomerForm
+    success_url = reverse_lazy("ecomapp:home")
+
+    def form_valid(self, form):
+
+        username  = form.cleaned_data.get("username")
+        password = form.cleaned_data.get("password")
+        email = form.cleaned_data.get("email")
+
+        user = User.objects.create_user(username , email , password)
+        form.instance.user = user        
+        return super().form_valid(form)
+
+
+
+
+
